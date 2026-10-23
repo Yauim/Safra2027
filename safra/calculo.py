@@ -101,11 +101,12 @@ def checagens(e: pd.DataFrame) -> pd.DataFrame:
         soma = (r["pes_arabica"] or 0) + (r["pes_conilon"] or 0)
         p26 = r["pes_2026"]
         if soma > 0 and pd.notna(p26) and p26 > 0:
-            dif = abs(p26 - soma) / soma
-            if dif > 0.5:
-                add(c, "Grave", f"Pés em 2026 ({p26:,.0f}) muito diferente de arábica + conilon ({soma:,.0f}).")
-            elif dif > 0.1:
-                add(c, "Atenção", f"Pés em 2026 ({p26:,.0f}) difere {dif:.0%} de arábica + conilon ({soma:,.0f}).")
+            if p26 > soma * 1.5:
+                add(c, "Grave", f"Pés em 2026 ({p26:,.0f}) muito acima de arábica + conilon ({soma:,.0f}): possível erro de digitação.")
+            elif soma > p26 * 1.1:
+                add(c, "Atenção", f"Arábica + conilon ({soma:,.0f}) acima dos pés em produção em 2026 ({p26:,.0f}): pode incluir pés novos ainda sem produção.")
+            elif p26 > soma * 1.1:
+                add(c, "Atenção", f"Pés em 2026 ({p26:,.0f}) acima de arábica + conilon ({soma:,.0f}).")
         for a, b in zip(ANOS[:-1], ANOS[1:]):
             pa, pb = r[f"pes_{a}"], r[f"pes_{b}"]
             if pd.notna(pa) and pd.notna(pb) and pa > 0 and pb > 0 and (pb / pa > 3 or pa / pb > 3):
