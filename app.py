@@ -1,5 +1,5 @@
 """
-Sistema de apoio à estimativa da safra cafeeira 2027 em Mantenópolis-ES
+Sistema de apoio à decisão para estimativa da safra cafeeira do Espírito Santo
 sob influência do El Niño 2026/2027.
 
 Esta é a camada de interface. Ela não faz cálculo nem acessa o banco
@@ -32,7 +32,7 @@ def fmt(n, casas=0) -> str:
     return f"{n:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-st.set_page_config(page_title="Safra 2027 · Mantenópolis", page_icon="☕", layout="wide")
+st.set_page_config(page_title="Safra 2027 · Espírito Santo", page_icon="☕", layout="wide")
 
 
 # ----------------------------------------------------------------------------
@@ -68,8 +68,8 @@ db = abrir_banco()
 # Barra lateral
 # ----------------------------------------------------------------------------
 st.sidebar.title("☕ Safra 2027")
-st.sidebar.caption("Mantenópolis-ES, El Niño 2026/2027")
-pagina = st.sidebar.radio("Tela", ["Clima e El Niño", "Histórico do município", "Estimativa por produtor",
+st.sidebar.caption("Espírito Santo · El Niño 2026/2027")
+pagina = st.sidebar.radio("Tela", ["Clima e El Niño", "Histórico do Espírito Santo", "Estimativa por produtor",
                                    "Resumo do grupo", "Qualidade dos dados"])
 
 st.sidebar.divider()
@@ -149,7 +149,7 @@ with st.sidebar.expander("Como a estimativa é calculada"):
     st.markdown(f"""
 Para cada produtor: **sacas por mil pés na base × pés em produção em 2026 × (1 + fator do cenário)**.
 
-Os fatores vêm do histórico do IBGE (2003–2025), comparando a produtividade
+Os fatores vêm do histórico do café no Espírito Santo (IBGE, 2003–2025), comparando a produtividade
 de cada safra com a tendência de longo prazo:
 
 - Sem efeito: 0%
@@ -208,7 +208,7 @@ if pagina == "Clima e El Niño":
     )
     st.caption(
         f"Comparação na mesma janela de todos os anos: 1º de setembro a {ultimo_dia:%d/%m}. "
-        "Fonte: NASA POWER (chuva corrigida) e NOAA/CPC."
+        "Clima da região dos produtores participantes (Noroeste do ES). Fonte: NASA POWER (chuva corrigida) e NOAA/CPC."
     )
 
     st.subheader("Chuva e calor na florada, ano a ano")
@@ -237,26 +237,24 @@ if pagina == "Clima e El Niño":
 
 
 # ----------------------------------------------------------------------------
-# Tela 2 · Histórico do município
+# Tela 2 · Histórico do Espírito Santo
 # ----------------------------------------------------------------------------
-elif pagina == "Histórico do município":
-    st.title("Safras fortes de El Niño ficaram bem abaixo da tendência")
+elif pagina == "Histórico do Espírito Santo":
+    st.title("Safras sob El Niño forte ficaram abaixo da tendência")
     h = base[base["sacas_ha_total"].notna()].copy()
-    h["situação do dado"] = np.where(h["dado_repetido_ibge"], "Repetido pelo IBGE", "Atualizado")
 
     pontos = alt.Chart(h).mark_point(size=90, filled=True).encode(
         x=alt.X("safra:O", title="Safra"),
         y=alt.Y("sacas_ha_total:Q", title="Sacas por hectare"),
         color=alt.Color("fase_enos:N", scale=COR_FASE, title="ENOS na florada"),
-        shape=alt.Shape("situação do dado:N", scale=alt.Scale(range=["circle", "triangle-down"])),
         tooltip=["safra", "sacas_ha_total", "fase_enos", alt.Tooltip("oni_florada:Q", format="+.2f"),
-                 alt.Tooltip("desvio_tendencia_pct:Q", format="+.1f"), "situação do dado"],
+                 alt.Tooltip("desvio_tendencia_pct:Q", format="+.1f")],
     )
     tend = alt.Chart(h).mark_line(color=GRAO, strokeDash=[6, 4]).encode(x="safra:O", y="tendencia_sacas_ha:Q")
     serie = alt.Chart(h).mark_line(color=CINZA, opacity=0.6).encode(x="safra:O", y="sacas_ha_total:Q")
     st.altair_chart((serie + tend + pontos).properties(height=320), width="stretch")
-    st.caption("Linha tracejada: tendência de longo prazo (tecnologia, renovação de lavouras). "
-               "Triângulos: anos em que o IBGE repetiu o valor do ano anterior.")
+    st.caption("Produtividade do café no Espírito Santo (IBGE, Produção Agrícola Municipal). "
+               "Linha tracejada: tendência de longo prazo (tecnologia, renovação de lavouras).")
 
     st.subheader("Desvio médio em relação à tendência")
     v = h[~h["dado_repetido_ibge"]]
@@ -271,18 +269,17 @@ elif pagina == "Histórico do município":
 
     st.subheader("Safras sob El Niño")
     en = h[h["fase_enos"] == "El Niño"][["safra", "oni_florada", "intensidade_el_nino", "chuva_florada_set_nov_mm",
-                                          "dias_acima_35c_florada", "sacas_ha_total", "desvio_tendencia_pct",
-                                          "situação do dado"]]
-    st.dataframe(en.rename(columns={
+                                          "dias_acima_35c_florada", "sacas_ha_total", "desvio_tendencia_pct"]]
+    st.dataframe(en.round(1).rename(columns={
         "oni_florada": "ONI", "intensidade_el_nino": "intensidade", "chuva_florada_set_nov_mm": "chuva florada (mm)",
         "dias_acima_35c_florada": "dias ≥35 °C", "sacas_ha_total": "sc/ha", "desvio_tendencia_pct": "desvio (%)"}),
         hide_index=True, width="stretch")
 
-    st.subheader("Estimativa municipal para 2027")
-    tend27, area, mun = calculo.cenarios_municipio(base, fatores)
+    st.subheader("Estimativa para o Espírito Santo em 2027")
+    tend27, area, mun = calculo.cenarios_estado(base, fatores)
     cols = st.columns(len(fatores))
     for col, (nome, f) in zip(cols, fatores.items()):
-        col.metric(nome, f"{mun[nome] / 1000:,.0f} mil sacas".replace(",", "."),
+        col.metric(nome, f"{mun[nome] / 1e6:.1f} mi sacas".replace(".", ","),
                    f"{tend27 * (1 + f):.1f} sc/ha", delta_color="off")
     st.caption(f"Tendência 2027: {tend27:.1f} sc/ha × {area:,.0f} ha colhidos em 2025.".replace(",", "."))
 

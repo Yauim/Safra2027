@@ -34,4 +34,4 @@ def oni(pasta: Path) -> pd.DataFrame:
 
 
 def base_historica(pasta: Path) -> pd.DataFrame:
-    return pd.read_csv(pasta / "base_safras_mantenopolis_2003_2027.csv")
+    return pd.read_csv(pasta / "base_safras_es_2003_2027.csv")

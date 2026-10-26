@@ -10,7 +10,7 @@ METODOS = {
 }
 
 
-# --- cenários a partir do histórico do município -------------------------------
+# --- cenários a partir do histórico do Espírito Santo -------------------------------
 def fase_enos(v: float) -> str:
     if pd.isna(v):
         return "—"
@@ -32,7 +32,7 @@ def fatores_cenario(base: pd.DataFrame) -> dict:
     return {"Sem efeito": 0.0, "El Niño médio": round(medio / 100, 3), "El Niño forte": round(forte / 100, 3)}
 
 
-def cenarios_municipio(base: pd.DataFrame, fatores: dict) -> tuple[float, float, dict]:
+def cenarios_estado(base: pd.DataFrame, fatores: dict) -> tuple[float, float, dict]:
     h = base[base["sacas_ha_total"].notna()]
     t = h.dropna(subset=["tendencia_sacas_ha"])
     tend27 = float(np.polyval(np.polyfit(t["safra"], t["tendencia_sacas_ha"], 1), 2027))
