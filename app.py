@@ -47,14 +47,6 @@ def abrir_banco() -> banco.Banco:
     return db
 
 
-@st.cache_resource
-def banco_exemplo() -> banco.Banco:
-    db = banco.Banco(RAIZ / "banco" / "exemplo.db")
-    db.apagar_tudo()
-    db.importar(*formulario.ler_respostas(PASTA / "produtores_EXEMPLO_ficticio.csv"))
-    return db
-
-
 carregar_clima_local = st.cache_data(fontes.clima_local)
 baixar_clima_nasa = st.cache_data(ttl=60 * 60 * 24)(fontes.clima_nasa)
 oni = st.cache_data(fontes.oni)(PASTA)
@@ -125,17 +117,17 @@ else:
     clima_df = carregar_clima_local(PASTA)
 clima = clima_df
 
-exemplo = db.total() == 0
-fonte = banco_exemplo() if exemplo else db
-larga = calculo.tabela_larga(fonte.produtores(), fonte.safras())
-todos = calculo.estimar(larga, fatores, metodo)
-alertas = calculo.checagens(todos)
-graves = set(alertas.loc[alertas["gravidade"] == "Grave", "produtor"])
-est = todos[~todos["codigo"].isin(graves)] if excluir_graves else todos
+sem_respostas = db.total() == 0
+if not sem_respostas:
+    larga = calculo.tabela_larga(db.produtores(), db.safras())
+    todos = calculo.estimar(larga, fatores, metodo)
+    alertas = calculo.checagens(todos)
+    graves = set(alertas.loc[alertas["gravidade"] == "Grave", "produtor"])
+    est = todos[~todos["codigo"].isin(graves)] if excluir_graves else todos
 
 st.sidebar.divider()
-if exemplo:
-    st.sidebar.caption("Banco vazio: exibindo o exemplo fictício.")
+if sem_respostas:
+    st.sidebar.caption("Banco SQLite: nenhuma resposta ainda.")
 else:
     st.sidebar.caption(f"Banco SQLite: {db.total()} respostas.")
     with st.sidebar.expander("Apagar respostas do banco"):
@@ -159,9 +151,11 @@ de cada safra com a tendência de longo prazo:
 Safra com 0 saca e pés em produção (lavoura recepada, por exemplo) fica fora da média.
 """)
 
-if exemplo:
-    st.info("Os produtores exibidos são **fictícios**, gerados só para demonstrar o sistema. "
-            "Configure o endereço da planilha ou envie o CSV das respostas na barra lateral para substituí-los.", icon="🧪")
+if sem_respostas and pagina in ("Estimativa por produtor", "Resumo do grupo", "Qualidade dos dados"):
+    st.title(pagina)
+    st.info("Ainda não há respostas de produtores no banco. Configure o endereço da planilha do "
+            "Google Forms ou envie o CSV das respostas na barra lateral.", icon="📋")
+    st.stop()
 
 
 # ----------------------------------------------------------------------------
@@ -340,7 +334,8 @@ elif pagina == "Estimativa por produtor":
 # Tela 4 · Resumo do grupo
 # ----------------------------------------------------------------------------
 elif pagina == "Resumo do grupo":
-    st.title(f"{len(est)} produtores, {fmt(est['pes_2026'].sum())} de pés em produção")
+    total_pes = est["pes_2026"].sum()
+    st.title(f"{len(est)} produtores, {fmt(total_pes)} {'de pés' if total_pes >= 1e6 else 'pés'} em produção")
     if excluir_graves and graves:
         st.caption(f"{len(graves)} resposta(s) com problema grave ficaram fora das somas. Veja a tela Qualidade dos dados.")
 
@@ -378,7 +373,9 @@ elif pagina == "Resumo do grupo":
         efeito_2024=("efeito_2024_pct", "median"), sacas_mil_pes=("prod_base", "median"),
         **{c: (f"est_2027_{c}", "sum") for c in CENARIOS}).reset_index()
     st.dataframe(grp.rename(columns={recorte: nomes[recorte], "pes": "pés", "efeito_2024": "2024 vs 2026 (%)",
-                                     "sacas_mil_pes": "sacas por mil pés"}).round(1),
+                                     "sacas_mil_pes": "sacas por mil pés"}).round(1)
+                 .assign(**{"2024 vs 2026 (%)": lambda d: d["2024 vs 2026 (%)"].map(
+                     lambda v: "—" if pd.isna(v) else f"{v:+.1f}")}),
                  hide_index=True, width="stretch")
 
     st.subheader("O que os produtores viram no campo")

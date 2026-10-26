@@ -34,7 +34,7 @@ aplicadas e respostas apagadas da planilha saem do banco.
 **Manual.** Sem o link configurado, a barra lateral mostra um campo para enviar o CSV baixado da
 planilha (Arquivo > Fazer download > .csv).
 
-Sem respostas no banco, o sistema mostra 50 produtores **fictícios** (`dados/produtores_EXEMPLO_ficticio.csv`).
+Sem respostas no banco, as telas de produtores mostram um aviso; clima e histórico funcionam normalmente.
 
 ## Publicar com link
 
