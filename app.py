@@ -109,7 +109,7 @@ usar_api = st.sidebar.toggle("Atualizar clima pela API da NASA POWER", value=Fal
 if usar_api:
     try:
         clima_df = baixar_clima_nasa()
-        st.sidebar.success(f"Clima atualizado até {clima_df['data'].max():%d/%m/%Y}")
+        st.sidebar.success(f"Clima atualizado até {clima_df.dropna(subset=['chuva_mm'])['data'].max():%d/%m/%Y}")
     except Exception:
         clima_df = carregar_clima_local(PASTA)
         st.sidebar.warning("API indisponível; usando a cópia local.")
