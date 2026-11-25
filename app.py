@@ -287,10 +287,8 @@ elif pagina == "Histórico do Espírito Santo":
     st.title("Safras sob El Niño forte ficaram abaixo da tendência")
     h = base[base["desvio_tendencia_pct"].notna()]
     v = h[~h["dado_repetido_ibge"]]
-    forte = h[h["oni_florada"] >= 1.5]
     grupos = [
-        ("El Niño forte", forte, "#6E1A1E"),
-        ("El Niño (todos)", v[v["fase_enos"] == "El Niño"], CEREJA),
+        ("El Niño", v[v["fase_enos"] == "El Niño"], CEREJA),
         ("Neutro", v[v["fase_enos"] == "Neutro"], CINZA),
         ("La Niña", v[v["fase_enos"] == "La Niña"], AZUL),
     ]
@@ -327,9 +325,9 @@ elif pagina == "Histórico do Espírito Santo":
 
     col_desv.subheader("Desvio médio em relação à tendência")
     y = alt.Y("grupo:N", title=None, sort=list(resumo["grupo"]), axis=alt.Axis(labelFontWeight="bold", labelPadding=8, labelLimit=220))
-    x = alt.X("desvio:Q", title=None, scale=alt.Scale(domain=[-30, 14]),
-              axis=alt.Axis(values=[-20, -10, 0, 10], labelExpr="datum.value + '%'"))
-    barras_desvio = alt.Chart(resumo).mark_bar(height=30, cornerRadius=2).encode(
+    x = alt.X("desvio:Q", title=None, scale=alt.Scale(domain=[-9, 9]),
+              axis=alt.Axis(values=[-5, 0, 5], labelExpr="datum.value + '%'"))
+    barras_desvio = alt.Chart(resumo).mark_bar(height=36, cornerRadius=2).encode(
         y=y, x=x, color=alt.Color("cor:N", scale=None),
         tooltip=["grupo", alt.Tooltip("desvio:Q", format="+.1f"), alt.Tooltip("n:Q", title="safras"), "anos"])
     rot_neg = alt.Chart(resumo[resumo["desvio"] < 0]).mark_text(align="right", dx=-8, fontWeight="bold", fontSize=16).encode(
@@ -338,10 +336,9 @@ elif pagina == "Histórico do Espírito Santo":
         y=y, x=x, text="rotulo:N")
     zero = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="#333", strokeWidth=1.5).encode(x="x:Q")
     col_desv.markdown("&nbsp;", unsafe_allow_html=True)
-    col_desv.altair_chart(estilo((barras_desvio + zero + rot_neg + rot_pos).properties(height=250), fonte=15),
+    col_desv.altair_chart(estilo((barras_desvio + zero + rot_neg + rot_pos).properties(height=230), fonte=15),
                           width="stretch")
-    anos_forte = " e ".join(resumo.loc[0, "anos"].rsplit(", ", 1))
-    col_desv.caption(f"**El Niño forte** (ONI ≥ 1,5 na florada): safras **{anos_forte}**. "
+    col_desv.caption("Média por fase do ENOS na florada; entre parênteses, o número de safras. "
                "Desvio de cada safra em relação à tendência de longo prazo da produtividade (sacas/ha) do café no "
                "Espírito Santo. Fonte: **IBGE**, Produção Agrícola Municipal, 2003–2025; ONI: **NOAA/CPC**.")
 
