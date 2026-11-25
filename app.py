@@ -370,42 +370,78 @@ elif pagina == "Estimativa por produtor":
     for _, a in meus.iterrows():
         (st.error if a["gravidade"] == "Grave" else st.warning)(a["problema"])
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Pés de arábica", fmt(p["pes_arabica"]))
-    c2.metric("Pés de conilon", fmt(p["pes_conilon"]))
-    c3.metric("Irrigado", f"{fmt(p['irrigacao_pct'])}%")
-    c4.metric("Altitude", str(p["altitude"] or "—").replace("De ", "").replace(" a ", "–"))
+    # --- Ficha do produtor ---
+    ficha = [("Pés de arábica", fmt(p["pes_arabica"])), ("Pés de conilon", fmt(p["pes_conilon"])),
+             ("Irrigado", f"{fmt(p['irrigacao_pct'])}%"),
+             ("Altitude", str(p["altitude"] or "—").replace("De ", "").replace(" a ", "–"))]
+    for col, (rotulo, valor) in zip(st.columns(4), ficha):
+        col.container(border=True).metric(rotulo, valor)
 
+    # --- Gráficos: sacas (esquerda) e sacas por mil pés (direita) ---
     anos = [str(a) for a in calculo.ANOS]
+    nomes_cen = [c.replace("El Niño ", "").lower() for c in CENARIOS]
     barras = pd.DataFrame({
-        "safra": anos + [f"2027 {c.replace('El Niño ', '').lower()}" for c in CENARIOS],
+        "safra": anos + [f"2027 {n}" for n in nomes_cen],
+        "eixo": anos + [f"2027|{n}" for n in nomes_cen],
         "sacas": [p[f"sacas_{a}"] for a in calculo.ANOS] + [p[f"est_2027_{c}"] for c in CENARIOS],
         "tipo": ["Informado", "Informado (El Niño)", "Informado", "Informado"] + ["Estimado"] * len(CENARIOS),
     }).dropna(subset=["sacas"])
-    g = alt.Chart(barras).mark_bar().encode(
-        x=alt.X("safra:N", title=None, sort=None, axis=alt.Axis(labelAngle=0, labelOverlap=False, labelLimit=130)),
-        y=alt.Y("sacas:Q", title="Sacas"),
-        color=alt.Color("tipo:N", scale=alt.Scale(domain=["Informado (El Niño)", "Informado", "Estimado"],
-                                                   range=[CEREJA, VERDE, PALHA]), title=None),
-        tooltip=["safra", alt.Tooltip("sacas:Q", format=",.0f")])
-    st.altair_chart(g.properties(height=280), width="stretch")
+    cores_tipo = [("Informado", VERDE), ("Informado (safra 2024, El Niño)", CEREJA), ("Estimado para 2027", PALHA)]
+    legenda_tipo = " &nbsp;&nbsp; ".join(
+        f'<span style="font-size:1.05rem"><span style="display:inline-block;width:14px;height:14px;'
+        f'background:{cor};border-radius:2px;vertical-align:-1px"></span> {nome}</span>' for nome, cor in cores_tipo)
 
-    prod = pd.DataFrame({"safra": anos, "sacas por mil pés": [p[f"prod_{a}"] for a in calculo.ANOS]}).dropna()
-    st.altair_chart(alt.Chart(prod).mark_line(point=True, color=GRAO).encode(
-        x=alt.X("safra:O", title=None, axis=alt.Axis(labelAngle=0)), y="sacas por mil pés:Q",
-        tooltip=["safra", alt.Tooltip("sacas por mil pés:Q", format=".1f")]).properties(height=180),
-        width="stretch")
+    g_sacas, g_prod = st.columns([1.6, 1], gap="large")
+    with g_sacas:
+        st.subheader("Sacas colhidas e estimativa para 2027")
+        st.markdown(legenda_tipo, unsafe_allow_html=True)
+        x_b = alt.X("eixo:N", title=None, sort=None,
+                    axis=alt.Axis(labelAngle=0, labelExpr="split(datum.label, '|')", ticks=False, labelPadding=8,
+                                  labelOverlap=False, labelLimit=130))
+        y_b = alt.Y("sacas:Q", title=None, axis=alt.Axis(tickCount=4, domain=False, ticks=False),
+                    scale=alt.Scale(domainMax=float(barras["sacas"].max()) * 1.15))
+        base_b = alt.Chart(barras).encode(x=x_b, y=y_b)
+        colunas = base_b.mark_bar(cornerRadiusTopLeft=2, cornerRadiusTopRight=2, width={"band": 0.7}).encode(
+            color=alt.Color("tipo:N", legend=None, scale=alt.Scale(
+                domain=["Informado (El Niño)", "Informado", "Estimado"], range=[CEREJA, VERDE, PALHA])),
+            tooltip=["safra", "tipo", alt.Tooltip("sacas:Q", format=",.0f")])
+        valores = base_b.mark_text(dy=-10, fontSize=16, fontWeight="bold", color="#222").encode(
+            text=alt.Text("sacas:Q", format=",.0f"))
+        st.altair_chart(estilo((colunas + valores).properties(height=270), fonte=15), width="stretch")
 
-    a, b = st.columns(2)
-    a.metric("El Niño 2023/24: safra 2024 contra 2026", f"{fmt(p['efeito_2024_pct'])}%",
-             help="Sacas por mil pés em 2024 comparadas com 2026, que está no mesmo ciclo bienal.")
+    with g_prod:
+        st.subheader("Sacas por mil pés")
+        st.markdown('<span style="font-size:1.05rem">Produtividade informada em cada safra</span>',
+                    unsafe_allow_html=True)
+        prod = pd.DataFrame({"safra": anos, "sacas por mil pés": [p[f"prod_{a}"] for a in calculo.ANOS]}).dropna()
+        x_p = alt.X("safra:O", title=None, axis=alt.Axis(labelAngle=0, ticks=False, labelPadding=8, grid=False))
+        y_p = alt.Y("sacas por mil pés:Q", title=None, axis=alt.Axis(tickCount=4, domain=False, ticks=False),
+                    scale=alt.Scale(domainMax=float(prod["sacas por mil pés"].max()) * 1.2 if len(prod) else None))
+        base_p = alt.Chart(prod).encode(x=x_p, y=y_p)
+        linha_p = base_p.mark_line(color=GRAO, strokeWidth=3) + base_p.mark_point(
+            filled=True, size=110, color=GRAO, opacity=1).encode(
+            tooltip=["safra", alt.Tooltip("sacas por mil pés:Q", format=".1f")])
+        rot_p = base_p.mark_text(dy=-16, fontSize=16, fontWeight="bold", color="#222").transform_calculate(
+            rot="replace(format(datum['sacas por mil pés'], '.1f'), '.', ',')").encode(text="rot:N")
+        st.altair_chart(estilo((linha_p + rot_p).properties(height=270), fonte=15), width="stretch")
+
+    # --- Indicadores e situação da lavoura ---
+    a, b, c = st.columns([1, 1, 1.4])
+    a.container(border=True).metric(
+        "El Niño 2023/24: safra 2024 contra 2026", f"{fmt(p['efeito_2024_pct'])}%",
+        help="Sacas por mil pés em 2024 comparadas com 2026, que está no mesmo ciclo bienal.")
     if pd.notna(p["expectativa_2027"]):
-        b.metric("Expectativa do próprio produtor para 2027", f"{fmt(p['expectativa_2027'])} sacas",
-                 f"{fmt(p['expectativa_2027'] - p['est_2027_Sem efeito'])} vs. cenário sem efeito", delta_color="off")
-    st.caption(f"Safra 2026: {p['floradas_2026'] or '—'} florada(s), grãos {str(p['graos_2026'] or '—').lower()}, "
-               f"broca {str(p['broca_2026'] or '—').lower()}. Safra 2027: florada {str(p['florada_atual'] or '—').lower()}, "
-               f"{p['floradas_2027'] or '—'} florada(s) até agora, pegamento {str(p['pegamento_2027'] or '—').lower()}. "
-               f"Origem dos números: {str(p['origem_dado'] or '—').lower()}.")
+        dif = p["expectativa_2027"] - p["est_2027_Sem efeito"]
+        b.container(border=True).metric(
+            "Expectativa do próprio produtor para 2027", f"{fmt(p['expectativa_2027'])} sacas",
+            f"{'+' if dif > 0 else ''}{fmt(dif)} vs. cenário sem efeito", delta_color="off", delta_arrow="off")
+    with c.container(border=True):
+        st.markdown(
+            f"""**Safra 2026:** {p['floradas_2026'] or '—'} florada(s) · grãos {str(p['graos_2026'] or '—').lower()} · broca {str(p['broca_2026'] or '—').lower()}
+
+**Safra 2027:** florada {str(p['florada_atual'] or '—').lower()} · {p['floradas_2027'] or '—'} florada(s) até agora · pegamento {str(p['pegamento_2027'] or '—').lower()}
+
+**Origem dos números:** {str(p['origem_dado'] or '—').lower()}""")
 
 
 # ----------------------------------------------------------------------------
