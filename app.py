@@ -446,72 +446,144 @@ elif pagina == "Resumo do grupo":
     if excluir_graves and graves:
         st.caption(f"{len(graves)} resposta(s) com problema grave ficaram fora das somas. Veja a tela Qualidade dos dados.")
 
-    cols = st.columns(len(CENARIOS))
-    total_base = est["base_sacas"].sum()
-    for col, c in zip(cols, CENARIOS):
-        tot = est[f"est_2027_{c}"].sum()
-        col.metric(f"2027 · {c}", f"{fmt(tot)} sacas",
-                   f"{tot / total_base - 1:+.0%} vs. base" if fatores[c] else "base", delta_color="off")
+    aba_prod, aba_campo, aba_impacto, aba_todos = st.tabs(
+        ["Estimativa e produtividade", "O que os produtores viram no campo", "Onde o impacto pesa mais",
+         "Todos os produtores"])
 
-    st.subheader("Produtividade do grupo ano a ano")
-    bien = calculo.bienalidade_grupo(est)
-    serie = pd.DataFrame({"safra": [str(a) for a in bien], "sacas por mil pés": list(bien.values())})
-    serie["ciclo"] = np.where(serie["safra"].astype(int) % 2 == 1, "Ano ímpar (como 2027)", "Ano par")
-    st.altair_chart(alt.Chart(serie).mark_bar().encode(
-        x=alt.X("safra:N", title=None, axis=alt.Axis(labelAngle=0)), y="sacas por mil pés:Q",
-        color=alt.Color("ciclo:N", scale=alt.Scale(range=[CINZA, VERDE]), title=None),
-        tooltip=["safra", alt.Tooltip("sacas por mil pés:Q", format=".1f")]).properties(height=200),
-        width="stretch")
-    if pd.notna(bien[2025]) and pd.notna(bien[2026]):
-        dif = bien[2026] / bien[2025] - 1
-        st.caption(f"Em 2026 o grupo colheu {abs(dif):.0%} {'mais' if dif > 0 else 'menos'} por mil pés que em 2025. "
-                   "Se os anos ímpares forem os de alta, a bienalidade favorece 2027; se forem os pares, pesa contra.")
-    ef = est["efeito_2024_pct"].dropna()
-    if len(ef):
-        st.metric("El Niño 2023/24: safra 2024 contra 2026 (mediana do grupo)", f"{fmt(ef.median())}%",
-                  f"{len(ef)} produtores com as duas safras", delta_color="off")
+    # --- Print 1: estimativa do grupo e produtividade ano a ano ---
+    with aba_prod:
+        total_base = est["base_sacas"].sum()
+        for col, c in zip(st.columns(len(CENARIOS)), CENARIOS):
+            tot = est[f"est_2027_{c}"].sum()
+            col.container(border=True).metric(
+                f"Estimativa do grupo para 2027 · {c}", f"{fmt(tot)} sacas",
+                f"{tot / total_base - 1:+.0%} em relação à base".replace("+0%", "0%") if fatores[c] else "base",
+                delta_color="off", delta_arrow="off")
 
-    st.subheader("Onde o impacto pesa mais")
-    nomes = {"tipo_cafe": "Tipo de café", "irrigacao_faixa": "Irrigação", "altitude": "Altitude",
-             "origem_dado": "Origem do dado"}
-    recorte = st.radio("Agrupar por", list(nomes), horizontal=True, format_func=nomes.get)
-    grp = est.groupby(recorte).agg(
-        produtores=("codigo", "count"), pes=("pes_2026", "sum"),
-        efeito_2024=("efeito_2024_pct", "median"), sacas_mil_pes=("prod_base", "median"),
-        **{c: (f"est_2027_{c}", "sum") for c in CENARIOS}).reset_index()
-    st.dataframe(grp.rename(columns={recorte: nomes[recorte], "pes": "pés", "efeito_2024": "2024 vs 2026 (%)",
-                                     "sacas_mil_pes": "sacas por mil pés"}).round(1)
-                 .assign(**{"2024 vs 2026 (%)": lambda d: d["2024 vs 2026 (%)"].map(
-                     lambda v: "—" if pd.isna(v) else f"{v:+.1f}")}),
-                 hide_index=True, width="stretch")
+        bien = calculo.bienalidade_grupo(est)
+        serie = pd.DataFrame({"safra": [str(a) for a in bien], "v": list(bien.values())}).dropna()
+        serie["ciclo"] = np.where(serie["safra"].astype(int) % 2 == 1, "Ano ímpar (como 2027)", "Ano par")
+        legenda_ciclo = " &nbsp;&nbsp; ".join(
+            f'<span style="font-size:1.05rem"><span style="display:inline-block;width:14px;height:14px;'
+            f'background:{cor};border-radius:2px;vertical-align:-1px"></span> {nome}</span>'
+            for nome, cor in [("Ano ímpar (mesmo ciclo de 2027)", VERDE), ("Ano par", CINZA)])
 
-    st.subheader("O que os produtores viram no campo")
-    campos = {"floradas_2026": "Floradas da safra 2026", "graos_2026": "Grãos no pé na colheita de 2026",
-              "broca_2026": "Broca em 2026", "floradas_2027": "Floradas da safra 2027 até agora",
-              "pegamento_2027": "Pegamento da florada atual", "florada_atual": "Florada atual"}
-    c1, c2 = st.columns(2)
-    for i, (campo, titulo) in enumerate(campos.items()):
-        cont = est[campo].fillna("Sem resposta").value_counts().reset_index()
-        cont.columns = ["resposta", "produtores"]
-        (c1 if i % 2 == 0 else c2).altair_chart(alt.Chart(cont, title=titulo).mark_bar(color=GRAO).encode(
-            y=alt.Y("resposta:N", title=None, sort="-x", axis=alt.Axis(labelLimit=260, labelOverlap=False)),
-            x=alt.X("produtores:Q", title=None, axis=alt.Axis(tickMinStep=1)),
-            tooltip=["resposta", "produtores"]).properties(height=34 * len(cont) + 90), width="stretch")
-    st.caption("Desigualdade dos grãos contra broca na safra 2026 (número de produtores):")
-    cruz = pd.crosstab(est["graos_2026"], est["broca_2026"])
-    cruz.index.name, cruz.columns.name = "Grãos no pé", "Broca"
-    st.dataframe(cruz, width="stretch")
+        g_esq, g_dir = st.columns([1.6, 1], gap="large")
+        with g_esq:
+            st.subheader("Sacas por mil pés do grupo, ano a ano")
+            st.markdown(legenda_ciclo, unsafe_allow_html=True)
+            base_g = alt.Chart(serie).encode(
+                x=alt.X("safra:N", title=None, axis=alt.Axis(labelAngle=0, ticks=False, labelPadding=8)),
+                y=alt.Y("v:Q", title=None, axis=alt.Axis(tickCount=4, domain=False, ticks=False),
+                        scale=alt.Scale(domainMax=float(serie["v"].max()) * 1.18)))
+            barras_g = base_g.mark_bar(cornerRadiusTopLeft=2, cornerRadiusTopRight=2, width={"band": 0.6}).encode(
+                color=alt.Color("ciclo:N", legend=None, scale=alt.Scale(
+                    domain=["Ano ímpar (como 2027)", "Ano par"], range=[VERDE, CINZA])),
+                tooltip=["safra", alt.Tooltip("v:Q", format=".1f", title="sacas por mil pés")])
+            valores_g = base_g.mark_text(dy=-12, fontSize=16, fontWeight="bold", color="#222").transform_calculate(
+                rot="replace(format(datum.v, '.1f'), '.', ',')").encode(text="rot:N")
+            st.altair_chart(estilo((barras_g + valores_g).properties(height=245), fonte=15), width="stretch")
 
-    st.subheader("Todos os produtores")
-    colunas = ["codigo", "tipo_cafe", "pes_2026", "irrigacao_pct", "prod_base", "base_sacas"] \
-        + [f"est_2027_{c}" for c in CENARIOS] + ["expectativa_2027"]
-    tabela = est[colunas].round(1)
-    renomear = {"codigo": "produtor", "tipo_cafe": "tipo", "pes_2026": "pés 2026", "irrigacao_pct": "irrigado (%)",
-                "prod_base": "sacas por mil pés", "base_sacas": "base (sacas)", "expectativa_2027": "expectativa",
-                **{f"est_2027_{c}": f"2027 · {c}" for c in CENARIOS}}
-    st.dataframe(tabela.rename(columns=renomear), hide_index=True, width="stretch")
-    st.download_button("Baixar estimativas (CSV)", tabela.rename(columns=renomear).to_csv(index=False).encode("utf-8"),
-                       "estimativas_2027.csv", "text/csv")
+        with g_dir:
+            st.subheader("Comparações")
+            if pd.notna(bien.get(2025)) and pd.notna(bien.get(2026)):
+                dif = bien[2026] / bien[2025] - 1
+                st.container(border=True).metric(
+                    "Safra 2026 contra 2025", f"{dif:+.0%}".replace("-", "−"),
+                    f"{'mais' if dif > 0 else 'menos'} sacas por mil pés", delta_color="off", delta_arrow="off")
+            ef = est["efeito_2024_pct"].dropna()
+            if len(ef):
+                st.container(border=True).metric(
+                    "Safra 2024 (El Niño 2023/24) contra 2026", f"{ef.median():+.0f}%".replace("-", "−"),
+                    f"mediana de {len(ef)} produtores com as duas safras", delta_color="off", delta_arrow="off",
+                    help="Sacas por mil pés em 2024 comparadas com 2026, que está no mesmo ciclo bienal.")
+        anos_base = {"impares": "média de 2023 e 2025, anos ímpares como 2027", "recentes": "média de 2025 e 2026",
+                     "s2025": "safra 2025"}.get(metodo, "")
+        st.caption(f"**Base:** sacas por mil pés de cada produtor ({anos_base}) aplicadas aos pés em produção em 2026. "
+                   "**Cenários:** desvio médio das safras do Espírito Santo sob El Niño em relação à tendência "
+                   "(IBGE, 2003–2025).")
+
+    # --- Print 2: o que os produtores viram no campo ---
+    with aba_campo:
+        perguntas = [
+            ("floradas_2026", "Floradas da safra 2026", ["1", "2", "3", "3 ou mais", "Mais de 3"], {}),
+            ("graos_2026", "Grãos no pé na colheita de 2026",
+             ["Quase todos maduros juntos", "Mistura de verde e maduro", "Muito desigual (flor, verde e maduro)"],
+             {"Quase todos maduros juntos": "Quase todos maduros", "Mistura de verde e maduro": "Verde e maduro",
+              "Muito desigual (flor, verde e maduro)": "Flor, verde e maduro"}),
+            ("broca_2026", "Broca em 2026 (vs. ano normal)", ["Menor", "Igual", "Maior"], {}),
+            ("floradas_2027", "Floradas da safra 2027 até agora",
+             ["1", "2", "3", "3 ou mais", "Mais de 3", "Ainda não floresceu"], {}),
+            ("pegamento_2027", "Pegamento da florada atual", ["Bom", "Regular", "Ruim", "Ainda não dá para ver"],
+             {"Ainda não dá para ver": "Ainda não dá"}),
+            ("florada_atual", "Como está a florada atual", ["Boa", "Regular", "Fraca", "Ainda não sei"], {}),
+        ]
+        alerta = {"Flor, verde e maduro", "Maior", "Ruim", "Fraca", "3", "3 ou mais", "Mais de 3"}
+        n_max = len(est)
+
+        def grafico_campo(campo, titulo, ordem, curto):
+            cont = est[campo].fillna("Sem resposta").value_counts()
+            # mostra as opções principais mesmo com zero; "Não sei", "Sem resposta" etc. só se alguém marcou
+            opcoes = [o for o in ordem if o in cont.index or o in ordem[:3]] + \
+                     [o for o in cont.index if o not in ordem]
+            df = pd.DataFrame({"resposta": opcoes, "produtores": [int(cont.get(o, 0)) for o in opcoes]})
+            df["rotulo"] = df["resposta"].map(lambda o: curto.get(o, o))
+            df["destaque"] = df["rotulo"].isin(alerta).map({True: "sim", False: "não"})
+            base_c = alt.Chart(df).encode(
+                y=alt.Y("rotulo:N", title=None, sort=list(df["rotulo"]),
+                        axis=alt.Axis(labelLimit=170, ticks=False, domain=False, labelPadding=8, minExtent=125, maxExtent=125)),
+                x=alt.X("produtores:Q", title=None, axis=None, scale=alt.Scale(domain=[0, n_max * 1.08])))
+            barras_c = base_c.mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3, height=30).encode(
+                color=alt.Color("destaque:N", legend=None, scale=alt.Scale(domain=["sim", "não"],
+                                                                         range=[CEREJA, GRAO])),
+                tooltip=[alt.Tooltip("resposta:N"), "produtores"])
+            valores_c = base_c.mark_text(align="left", dx=6, fontSize=16, fontWeight="bold", color="#222").encode(
+                text="produtores:Q")
+            st.markdown(f'<div style="font-size:1.15rem;font-weight:600">{titulo}</div>', unsafe_allow_html=True)
+            st.altair_chart(estilo((barras_c + valores_c).properties(height=46 * len(df) + 6), fonte=15),
+                            width="stretch")
+
+        st.markdown(f'<span style="font-size:1.05rem">Número de produtores por resposta ({n_max} no total). '
+                    f'<span style="display:inline-block;width:14px;height:14px;background:{CEREJA};border-radius:2px;'
+                    'vertical-align:-1px"></span> respostas que indicam problema na lavoura.</span>',
+                    unsafe_allow_html=True)
+        for linha in (perguntas[:3], perguntas[3:]):
+            for col, (campo, titulo, ordem, curto) in zip(st.columns(3, gap="medium"), linha):
+                with col:
+                    grafico_campo(campo, titulo, ordem, curto)
+        st.caption("**Safra 2026:** café colhido neste ano. **Safra 2027:** florada que estava acontecendo durante a "
+                   "coleta (outubro de 2026).")
+
+    # --- Tabelas ---
+    with aba_impacto:
+        nomes = {"tipo_cafe": "Tipo de café", "irrigacao_faixa": "Irrigação", "altitude": "Altitude",
+                 "origem_dado": "Origem do dado"}
+        recorte = st.radio("Agrupar por", list(nomes), horizontal=True, format_func=nomes.get)
+        grp = est.groupby(recorte).agg(
+            produtores=("codigo", "count"), pes=("pes_2026", "sum"),
+            efeito_2024=("efeito_2024_pct", "median"), sacas_mil_pes=("prod_base", "median"),
+            **{c: (f"est_2027_{c}", "sum") for c in CENARIOS}).reset_index()
+        st.dataframe(grp.rename(columns={recorte: nomes[recorte], "pes": "pés", "efeito_2024": "2024 vs 2026 (%)",
+                                         "sacas_mil_pes": "sacas por mil pés"}).round(1)
+                     .assign(**{"2024 vs 2026 (%)": lambda d: d["2024 vs 2026 (%)"].map(
+                         lambda v: "—" if pd.isna(v) else f"{v:+.1f}")}),
+                     hide_index=True, width="stretch")
+        st.caption("Desigualdade dos grãos contra broca na safra 2026 (número de produtores):")
+        cruz = pd.crosstab(est["graos_2026"], est["broca_2026"])
+        cruz.index.name, cruz.columns.name = "Grãos no pé", "Broca"
+        st.dataframe(cruz, width="stretch")
+
+    with aba_todos:
+        colunas = ["codigo", "tipo_cafe", "pes_2026", "irrigacao_pct", "prod_base", "base_sacas"] \
+            + [f"est_2027_{c}" for c in CENARIOS] + ["expectativa_2027"]
+        tabela = est[colunas].round(1)
+        renomear = {"codigo": "produtor", "tipo_cafe": "tipo", "pes_2026": "pés 2026", "irrigacao_pct": "irrigado (%)",
+                    "prod_base": "sacas por mil pés", "base_sacas": "base (sacas)", "expectativa_2027": "expectativa",
+                    **{f"est_2027_{c}": f"2027 · {c}" for c in CENARIOS}}
+        st.dataframe(tabela.rename(columns=renomear), hide_index=True, width="stretch")
+        st.download_button("Baixar estimativas (CSV)",
+                           tabela.rename(columns=renomear).to_csv(index=False).encode("utf-8"),
+                           "estimativas_2027.csv", "text/csv")
 
 
 # ----------------------------------------------------------------------------
