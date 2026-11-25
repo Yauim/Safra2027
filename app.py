@@ -56,6 +56,12 @@ def fmt(n, casas=0) -> str:
 
 
 st.set_page_config(page_title="Safra 2027 · Espírito Santo", page_icon="☕", layout="wide")
+# Legendas (st.caption) mais escuras e um pouco maiores, para lerem bem no print
+st.markdown("""<style>
+[data-testid="stCaptionContainer"] { opacity: 1 !important; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color: #3a3a3a !important; font-size: 0.95rem !important; }
+[data-testid="stCaptionContainer"] strong { color: #111 !important; }
+</style>""", unsafe_allow_html=True)
 
 
 # ----------------------------------------------------------------------------
@@ -224,8 +230,9 @@ if pagina == "Clima e El Niño":
         delta_color="inverse",
     )
     st.caption(
-        f"Comparação na mesma janela de todos os anos: 1º de setembro a {ultimo_dia:%d/%m}. "
-        "Clima da região dos produtores participantes (Noroeste do ES). Fonte: NASA POWER (chuva corrigida) e NOAA/CPC."
+        f"Comparação na **mesma janela de todos os anos: 1º de setembro a {ultimo_dia:%d/%m}**. "
+        "Clima da região dos produtores participantes (**Noroeste do ES**). "
+        "Fonte: **NASA POWER** (chuva corrigida) e **NOAA/CPC**."
     )
 
     st.subheader("Chuva e calor na florada, ano a ano")
@@ -270,7 +277,7 @@ if pagina == "Clima e El Niño":
     ponto = agora.mark_point(filled=True, size=90, color=CEREJA) + agora.mark_text(
         align="right", dx=-10, dy=-4, fontWeight="bold", color=CEREJA).encode(text=alt.Text("oni:Q", format="+.2f"))
     st.altair_chart(estilo((linha + limites + nomes_faixa + ponto).properties(height=200)), width="stretch")
-    st.caption("Acima de +0,5 °C: El Niño. Abaixo de −0,5 °C: La Niña.")
+    st.caption("Acima de **+0,5 °C: El Niño**. Abaixo de **−0,5 °C: La Niña**.")
 
 
 # ----------------------------------------------------------------------------
