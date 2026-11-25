@@ -591,24 +591,76 @@ elif pagina == "Resumo do grupo":
 # ----------------------------------------------------------------------------
 else:
     st.title("Qualidade dos dados")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Respostas", len(todos))
-    c2.metric("Com problema grave", len(graves))
-    c3.metric("Com ponto de atenção", alertas.loc[alertas["gravidade"] == "Atenção", "produtor"].nunique())
-    if alertas.empty:
-        st.success("Nenhum problema encontrado nas respostas.")
-    else:
-        st.dataframe(alertas, hide_index=True, width="stretch")
-    st.markdown("""
-**O que o sistema confere em cada resposta**
+    st.markdown('<span style="font-size:1.05rem">Antes de entrar nas estimativas, cada resposta do questionário passa '
+                'por cinco conferências automáticas.</span>', unsafe_allow_html=True)
 
-- Se os pés em produção em 2026 batem com a soma de pés de arábica e de conilon.
-- Se o número de pés não salta mais de três vezes de um ano para outro, sinal de erro de digitação.
-- Safras com pés em produção e nenhuma saca colhida, que costumam indicar lavoura recepada.
-- Produtividade acima de 60 sacas por mil pés.
-- Se há produção nos anos usados como base para estimar 2027.
+    cod_atencao = set(alertas.loc[alertas["gravidade"] == "Atenção", "produtor"]) - graves
+    sem_pendencia = len(todos) - len(cod_atencao | graves)
+    cartoes = [("Respostas conferidas", len(todos), None),
+               ("Sem nenhuma pendência", sem_pendencia, None),
+               ("Com ponto de atenção", len(cod_atencao), "mantidas nas somas"),
+               ("Com problema grave", len(graves), "fora das somas" if excluir_graves else "mantidas nas somas")]
+    for col, (rotulo, valor, obs) in zip(st.columns(4), cartoes):
+        col.container(border=True).metric(rotulo, valor, obs, delta_color="off", delta_arrow="off")
 
-Respostas com problema **grave** ficam fora das somas do grupo (pode ser desligado na barra lateral).
-Para corrigir, ajuste o valor na planilha do Google Forms, baixe o CSV de novo e envie na barra lateral:
-a resposta é atualizada no banco e mantém o mesmo código.
-""")
+    # --- Quadro: cada resposta x cada conferência ---
+    SIMBOLO = {"ok": ("✓", "#3E8E57", "rgba(62,142,87,.16)"),
+               "Atenção": ("!", "#9A6700", "rgba(217,164,6,.22)"),
+               "Grave": ("✕", "#A3292E", "rgba(163,41,46,.15)")}
+
+    def celula(estado):
+        simb, cor, fundo = SIMBOLO[estado]
+        return (f'<td style="text-align:center;padding:3px 4px"><span style="display:inline-block;width:28px;'
+                f'height:28px;line-height:28px;border-radius:6px;background:{fundo};color:{cor};font-weight:700;'
+                f'font-size:1.1rem">{simb}</span></td>')
+
+    cab = "".join(f'<th style="padding:6px 6px;font-weight:600;text-align:center;font-size:.92rem;'
+                  f'line-height:1.2">{nome}</th>' for nome in calculo.REGRAS.values())
+    linhas = []
+    for _, p in todos.iterrows():
+        meus = alertas[alertas["produtor"] == p["codigo"]]
+        cels = ""
+        for chave in calculo.REGRAS:
+            g = meus.loc[meus["regra"] == chave, "gravidade"]
+            cels += celula("Grave" if (g == "Grave").any() else "Atenção" if len(g) else "ok")
+        origem = {"Anotação ou registro": "Anotação", "Parte anotação, parte memória": "Anotação e memória"}.get(
+            p["origem_dado"], p["origem_dado"] or "—")
+        linhas.append(f'<tr><td style="padding:3px 8px;font-weight:700;font-size:1.05rem">{p["codigo"]}</td>{cels}'
+                      f'<td style="padding:3px 8px;font-size:.95rem;white-space:nowrap">{origem}</td></tr>')
+    quadro = (f'<table style="width:100%;border-collapse:collapse;border:none">'
+              f'<tr><th style="text-align:left;padding:6px 8px">Resposta</th>{cab}'
+              f'<th style="text-align:left;padding:6px 8px;font-weight:600;font-size:.92rem">Origem dos números</th></tr>'
+              f'{"".join(linhas)}</table>')
+    legenda = " &nbsp;&nbsp; ".join(
+        f'<span style="font-size:1rem"><span style="display:inline-block;width:20px;height:20px;line-height:20px;'
+        f'text-align:center;border-radius:4px;background:{f};color:{c};font-weight:700">{s_}</span> {t}</span>'
+        for (s_, c, f), t in [(SIMBOLO["ok"], "sem pendência"), (SIMBOLO["Atenção"], "atenção"),
+                              (SIMBOLO["Grave"], "problema grave")])
+
+    q_esq, q_dir = st.columns([1.55, 1], gap="large")
+    with q_esq:
+        st.subheader("Conferência de cada resposta")
+        st.markdown(legenda, unsafe_allow_html=True)
+        st.markdown(quadro, unsafe_allow_html=True)
+
+    with q_dir:
+        st.subheader("Pontos encontrados")
+        if alertas.empty:
+            st.success("Nenhum problema encontrado nas respostas.")
+        else:
+            lista = st.container(height=400, border=False) if len(alertas) > 4 else st.container()
+            ordem = alertas.assign(_o=alertas["gravidade"].map({"Grave": 0, "Atenção": 1})).sort_values(["_o", "produtor"])
+            for _, a in ordem.iterrows():
+                simb, cor, fundo = SIMBOLO[a["gravidade"]]
+                tratamento = ("fica fora das somas" if excluir_graves else "mantida nas somas") \
+                    if a["gravidade"] == "Grave" else "mantida nas somas"
+                lista.markdown(
+                    f'<div style="border-left:4px solid {cor};background:{fundo};border-radius:4px;'
+                    f'padding:6px 12px;margin-bottom:8px;font-size:.93rem;line-height:1.3">'
+                    f'<b>{a["produtor"]}</b> · {calculo.REGRAS.get(a["regra"], "")}<br>{a["problema"]}'
+                    f'<br><span style="opacity:.8;font-size:.9rem">{a["gravidade"]}: {tratamento}</span></div>',
+                    unsafe_allow_html=True)
+
+    st.caption("**Conferências:** arábica + conilon contra os pés em produção em 2026; salto de mais de 3 vezes no "
+               "número de pés; safra com pés e nenhuma saca; mais de 60 sacas por mil pés; produção nos anos da base. "
+               "Correções feitas na planilha entram sozinhas.")

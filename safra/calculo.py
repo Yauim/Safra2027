@@ -89,12 +89,22 @@ def bienalidade_grupo(e: pd.DataFrame) -> dict:
     return r
 
 
+# Regras de conferência aplicadas a cada resposta (chave -> nome curto para a tela)
+REGRAS = {
+    "tipos": "Arábica + conilon",
+    "salto": "Salto de pés",
+    "zerada": "Safra zerada",
+    "alta": "Produtividade",
+    "base": "Base 2027",
+}
+
+
 def checagens(e: pd.DataFrame) -> pd.DataFrame:
     """Lista problemas de preenchimento. 'Grave' tira o produtor das somas."""
     achados = []
 
-    def add(c, grav, msg):
-        achados.append({"produtor": c, "gravidade": grav, "problema": msg})
+    def add(c, grav, msg, regra):
+        achados.append({"produtor": c, "gravidade": grav, "problema": msg, "regra": regra})
 
     for _, r in e.iterrows():
         c = r["codigo"]
@@ -102,22 +112,22 @@ def checagens(e: pd.DataFrame) -> pd.DataFrame:
         p26 = r["pes_2026"]
         if soma > 0 and pd.notna(p26) and p26 > 0:
             if p26 > soma * 1.5:
-                add(c, "Grave", f"Pés em 2026 ({p26:,.0f}) muito acima de arábica + conilon ({soma:,.0f}): possível erro de digitação.")
+                add(c, "Grave", f"Pés em 2026 ({p26:,.0f}) muito acima de arábica + conilon ({soma:,.0f}): possível erro de digitação.", "tipos")
             elif soma > p26 * 1.1:
-                add(c, "Atenção", f"Arábica + conilon ({soma:,.0f}) acima dos pés em produção em 2026 ({p26:,.0f}): pode incluir pés novos ainda sem produção.")
+                add(c, "Atenção", f"Arábica + conilon ({soma:,.0f}) acima dos pés em produção em 2026 ({p26:,.0f}): pode incluir pés novos ainda sem produção.", "tipos")
             elif p26 > soma * 1.1:
-                add(c, "Atenção", f"Pés em 2026 ({p26:,.0f}) acima de arábica + conilon ({soma:,.0f}).")
+                add(c, "Atenção", f"Pés em 2026 ({p26:,.0f}) acima de arábica + conilon ({soma:,.0f}).", "tipos")
         for a, b in zip(ANOS[:-1], ANOS[1:]):
             pa, pb = r[f"pes_{a}"], r[f"pes_{b}"]
             if pd.notna(pa) and pd.notna(pb) and pa > 0 and pb > 0 and (pb / pa > 3 or pa / pb > 3):
-                add(c, "Grave", f"Pés saltam de {pa:,.0f} em {a} para {pb:,.0f} em {b}: possível erro de digitação.")
+                add(c, "Grave", f"Pés saltam de {pa:,.0f} em {a} para {pb:,.0f} em {b}: possível erro de digitação.", "salto")
         for ano in ANOS:
             if r[f"pes_{ano}"] > 0 and r[f"sacas_{ano}"] == 0:
-                add(c, "Atenção", f"{ano}: {r[f'pes_{ano}']:,.0f} pés em produção e 0 sacas colhidas.")
+                add(c, "Atenção", f"{ano}: {r[f'pes_{ano}']:,.0f} pés em produção e 0 sacas colhidas.", "zerada")
             if r[f"prod_{ano}"] > 60:
-                add(c, "Atenção", f"{ano}: {r[f'prod_{ano}']:.0f} sacas por mil pés, acima do esperado.")
+                add(c, "Atenção", f"{ano}: {r[f'prod_{ano}']:.0f} sacas por mil pés, acima do esperado.", "alta")
         if not (r["base_sacas"] > 0):
-            add(c, "Grave", "Sem produção nos anos usados como base: não é possível estimar 2027.")
-    df = pd.DataFrame(achados, columns=["produtor", "gravidade", "problema"])
+            add(c, "Grave", "Sem produção nos anos usados como base: não é possível estimar 2027.", "base")
+    df = pd.DataFrame(achados, columns=["produtor", "gravidade", "problema", "regra"])
     df["problema"] = df["problema"].str.replace(",", ".")
     return df
