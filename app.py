@@ -425,8 +425,8 @@ elif pagina == "Estimativa por produtor":
             rot="replace(format(datum['sacas por mil pés'], '.1f'), '.', ',')").encode(text="rot:N")
         st.altair_chart(estilo((linha_p + rot_p).properties(height=270), fonte=15), width="stretch")
 
-    # --- Indicadores e situação da lavoura ---
-    a, b, c = st.columns([1, 1, 1.4])
+    # --- Indicadores ---
+    a, b = st.columns(2)
     a.container(border=True).metric(
         "El Niño 2023/24: safra 2024 contra 2026", f"{fmt(p['efeito_2024_pct'])}%",
         help="Sacas por mil pés em 2024 comparadas com 2026, que está no mesmo ciclo bienal.")
@@ -435,13 +435,6 @@ elif pagina == "Estimativa por produtor":
         b.container(border=True).metric(
             "Expectativa do próprio produtor para 2027", f"{fmt(p['expectativa_2027'])} sacas",
             f"{'+' if dif > 0 else ''}{fmt(dif)} vs. cenário sem efeito", delta_color="off", delta_arrow="off")
-    with c.container(border=True):
-        st.markdown(
-            f"""**Safra 2026:** {p['floradas_2026'] or '—'} florada(s) · grãos {str(p['graos_2026'] or '—').lower()} · broca {str(p['broca_2026'] or '—').lower()}
-
-**Safra 2027:** florada {str(p['florada_atual'] or '—').lower()} · {p['floradas_2027'] or '—'} florada(s) até agora · pegamento {str(p['pegamento_2027'] or '—').lower()}
-
-**Origem dos números:** {str(p['origem_dado'] or '—').lower()}""")
 
 
 # ----------------------------------------------------------------------------
