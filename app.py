@@ -214,7 +214,7 @@ if pagina == "Clima e El Niño":
     c1, c2, c3 = st.columns(3)
     c1.metric(
         f"ONI ({ultimo['trimestre']} {ultimo['ano']})",
-        f"{ultimo['oni']:+.2f} °C",
+        f"{ultimo['oni']:+.2f} °C".replace(".", ","),
         f"El Niño {calculo.intensidade(ultimo['oni'])}",
         delta_color="off",
     )
@@ -235,49 +235,53 @@ if pagina == "Clima e El Niño":
         "Fonte: **NASA POWER** (chuva corrigida) e **NOAA/CPC**."
     )
 
-    st.subheader("Chuva e calor na florada, ano a ano")
-    st.markdown(legenda_fases(), unsafe_allow_html=True)
-    # Anos curtos ('02, '03...) na horizontal: cabem lado a lado sem girar o texto
-    eixo_ano = alt.X("ano:O", title=None, axis=alt.Axis(labelAngle=0, labelExpr="\"'\" + slice(datum.label, 2)",
-                                                         ticks=False, labelPadding=6))
-    base_graf = alt.Chart(por_ano).encode(
-        x=eixo_ano,
-        color=alt.Color("fase:N", scale=COR_FASE, legend=None),
-        tooltip=["ano", alt.Tooltip("chuva:Q", format=".0f"), "dias_35", alt.Tooltip("oni:Q", format="+.2f")],
-    )
+    aba_clima, aba_oni = st.tabs(["Chuva e calor na florada", "Índice ONI desde 2002"])
+    with aba_clima:
+        st.subheader("Chuva e calor na florada, ano a ano")
+        st.markdown(legenda_fases(), unsafe_allow_html=True)
+        # Anos curtos ('02, '03...) na horizontal: cabem lado a lado sem girar o texto
+        eixo_ano = alt.X("ano:O", title=None, axis=alt.Axis(labelAngle=0, labelExpr="\"'\" + slice(datum.label, 2)",
+                                                             ticks=False, labelPadding=6))
+        base_graf = alt.Chart(por_ano).encode(
+            x=eixo_ano,
+            color=alt.Color("fase:N", scale=COR_FASE, legend=None),
+            tooltip=["ano", alt.Tooltip("chuva:Q", format=".0f"), "dias_35", alt.Tooltip("oni:Q", format="+.2f")],
+        )
 
-    def barras(campo, titulo, formato):
-        y = alt.Y(f"{campo}:Q", title=None, axis=alt.Axis(tickCount=4, domain=False, ticks=False))
-        b = base_graf.mark_bar(cornerRadiusTopLeft=2, cornerRadiusTopRight=2).encode(y=y)
-        # Valor só no ano atual, em destaque
-        rotulo = base_graf.transform_filter(alt.datum.ano == ano_atual).mark_text(
-            dy=-8, fontWeight="bold", color="#222").encode(y=y, text=alt.Text(f"{campo}:Q", format=formato))
-        return estilo((b + rotulo).properties(height=210, title=titulo))
+        def barras(campo, titulo, formato):
+            y = alt.Y(f"{campo}:Q", title=None, axis=alt.Axis(tickCount=4, domain=False, ticks=False))
+            b = base_graf.mark_bar(cornerRadiusTopLeft=2, cornerRadiusTopRight=2).encode(y=y)
+            # Valor só no ano atual, em destaque
+            rotulo = base_graf.transform_filter(alt.datum.ano == ano_atual).mark_text(
+                dy=-8, fontWeight="bold", color="#222").encode(y=y, text=alt.Text(f"{campo}:Q", format=formato))
+            return estilo((b + rotulo).properties(height=260, title=titulo))
 
-    g1, g2 = st.columns(2)
-    g1.altair_chart(barras("chuva", "Chuva (mm)", ".0f"), width="stretch")
-    g2.altair_chart(barras("dias_35", "Dias com máxima ≥ 35 °C", ".0f"), width="stretch")
+        g1, g2 = st.columns(2)
+        g1.altair_chart(barras("chuva", "Chuva (mm)", ".0f"), width="stretch")
+        g2.altair_chart(barras("dias_35", "Dias com máxima ≥ 35 °C", ".0f"), width="stretch")
 
-    st.subheader("Índice ONI desde 2002")
-    o = oni[oni["ano"] >= 2002].copy()
-    o["mes"] = pd.to_datetime(o["ano"].astype(str) + "-" + (o.groupby("ano").cumcount() + 1).astype(str) + "-15")
-    linha = alt.Chart(o).mark_area(line={"color": GRAO, "strokeWidth": 2}, color=alt.Gradient(
-        gradient="linear", stops=[alt.GradientStop(color=CEREJA, offset=0), alt.GradientStop(color=AZUL, offset=1)],
-        x1=1, x2=1, y1=0, y2=1), opacity=0.35).encode(
-        x=alt.X("mes:T", title=None, axis=alt.Axis(format="%Y", tickCount={"interval": "year", "step": 2},
-                                                   labelAngle=0, grid=False)),
-        y=alt.Y("oni:Q", title="ONI (°C)", axis=alt.Axis(values=[-2, -1, 0, 1, 2, 3], labelOverlap=False, domain=False, ticks=False)),
-        tooltip=["trimestre", "ano", alt.Tooltip("oni:Q", format="+.2f")],
-    )
-    faixas = pd.DataFrame({"y": [0.5, -0.5], "nome": ["El Niño", "La Niña"]})
-    limites = alt.Chart(faixas).mark_rule(strokeDash=[4, 4], color=CINZA).encode(y="y:Q")
-    nomes_faixa = sum((alt.Chart(faixas.iloc[[i]]).mark_text(align="left", x=4, dy=dy, color="#666").encode(
-        y="y:Q", text="nome:N") for i, dy in [(0, -9), (1, 11)]), alt.LayerChart())
-    agora = alt.Chart(o.tail(1)).encode(x="mes:T", y="oni:Q")
-    ponto = agora.mark_point(filled=True, size=90, color=CEREJA) + agora.mark_text(
-        align="right", dx=-10, dy=-4, fontWeight="bold", color=CEREJA).encode(text=alt.Text("oni:Q", format="+.2f"))
-    st.altair_chart(estilo((linha + limites + nomes_faixa + ponto).properties(height=200)), width="stretch")
-    st.caption("Acima de **+0,5 °C: El Niño**. Abaixo de **−0,5 °C: La Niña**.")
+
+    with aba_oni:
+        st.subheader("Índice ONI desde 2002")
+        o = oni[oni["ano"] >= 2002].copy()
+        o["mes"] = pd.to_datetime(o["ano"].astype(str) + "-" + (o.groupby("ano").cumcount() + 1).astype(str) + "-15")
+        linha = alt.Chart(o).mark_area(line={"color": GRAO, "strokeWidth": 2}, color=alt.Gradient(
+            gradient="linear", stops=[alt.GradientStop(color=CEREJA, offset=0), alt.GradientStop(color=AZUL, offset=1)],
+            x1=1, x2=1, y1=0, y2=1), opacity=0.35).encode(
+            x=alt.X("mes:T", title=None, axis=alt.Axis(format="%Y", tickCount={"interval": "year", "step": 2},
+                                                       labelAngle=0, grid=False)),
+            y=alt.Y("oni:Q", title="ONI (°C)", axis=alt.Axis(values=[-2, -1, 0, 1, 2, 3], labelOverlap=False, domain=False, ticks=False)),
+            tooltip=["trimestre", "ano", alt.Tooltip("oni:Q", format="+.2f")],
+        )
+        faixas = pd.DataFrame({"y": [0.5, -0.5], "nome": ["El Niño", "La Niña"]})
+        limites = alt.Chart(faixas).mark_rule(strokeDash=[4, 4], color=CINZA).encode(y="y:Q")
+        nomes_faixa = sum((alt.Chart(faixas.iloc[[i]]).mark_text(align="left", x=4, dy=dy, color="#555", fontSize=14).encode(
+            y="y:Q", text="nome:N") for i, dy in [(0, -9), (1, 11)]), alt.LayerChart())
+        agora = alt.Chart(o.tail(1)).encode(x="mes:T", y="oni:Q")
+        ponto = agora.mark_point(filled=True, size=90, color=CEREJA) + agora.mark_text(
+            align="right", dx=-10, dy=-4, fontWeight="bold", color=CEREJA).encode(text=alt.Text("oni:Q", format="+.2f"))
+        st.altair_chart(estilo((linha + limites + nomes_faixa + ponto).properties(height=320)), width="stretch")
+        st.caption("Acima de **+0,5 °C: El Niño**. Abaixo de **−0,5 °C: La Niña**.")
 
 
 # ----------------------------------------------------------------------------
