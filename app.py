@@ -608,8 +608,13 @@ else:
     sem_pendencia = len(todos) - len(cod_atencao | graves)
     cartoes = [("Respostas conferidas", len(todos)), ("Sem pendência", sem_pendencia),
                ("Com atenção", len(cod_atencao)), ("Com problema grave", len(graves))]
-    for col, (rotulo, valor) in zip(st.columns(4), cartoes):
-        col.container(border=True).metric(rotulo, valor)
+    # Cartões baixos, numa linha só (nome e número lado a lado), para a tela caber compacta no print
+    st.markdown('<div style="display:flex;gap:10px;margin:4px 0 10px">' + "".join(
+        f'<div style="flex:1;border:1px solid #ddd;border-radius:8px;padding:6px 12px;display:flex;'
+        f'align-items:center;justify-content:space-between;gap:8px">'
+        f'<span style="font-size:1.05rem;color:#333">{rotulo}</span>'
+        f'<span style="font-size:1.6rem;font-weight:600;color:#222">{valor}</span></div>'
+        for rotulo, valor in cartoes) + '</div>', unsafe_allow_html=True)
 
     # --- Quadro: cada resposta x cada conferência ---
     SIMBOLO = {"ok": ("✓", "#3E8E57", "rgba(62,142,87,.16)"),
